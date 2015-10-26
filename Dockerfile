@@ -60,7 +60,7 @@ RUN a2enmod php5
 
 COPY ./mediawiki-setup.sh /
 
-RUN sh /mediawiki-setup.sh
+RUN bash /mediawiki-setup.sh
 
 
 #*********************************************************************
