@@ -18,7 +18,7 @@ set -e
 # generate a random password
 #
 random_password() {
-  date +%N | sha256sum | base64 | head -c 16 ; echo
+    date +%N | sha256sum | base64 | head -c 16 ; echo
 }
 
 #
@@ -28,12 +28,13 @@ random_password() {
 #
 #
 getdbenv() {
-  local l_settings="$1"
-  # get database parameters from local settings
-  dbserver=`egrep '^.wgDBserver' $l_settings | cut -d'"' -f2`
-  dbname=`egrep '^.wgDBname'     $l_settings | cut -d'"' -f2`
-  dbuser=`egrep '^.wgDBuser'     $l_settings | cut -d'"' -f2`
-  dbpass=`egrep '^.wgDBpassword' $l_settings | cut -d'"' -f2`
+    local l_settings="$1"
+
+    # get database parameters from local settings
+    dbserver=`egrep '^.wgDBserver' $l_settings | cut -d'"' -f2`
+    dbname=`egrep '^.wgDBname'     $l_settings | cut -d'"' -f2`
+    dbuser=`egrep '^.wgDBuser'     $l_settings | cut -d'"' -f2`
+    dbpass=`egrep '^.wgDBpassword' $l_settings | cut -d'"' -f2`
 }
 
 #
@@ -55,13 +56,13 @@ dosql() {
 # prepare mysql
 #
 prepare_mysql() {
-  service mysql start
-  MYSQL_PASSWD=`random_password`
-  echo "setting MySQL password to random password $MYSQL_PASSWD"
-  mysqladmin -u root password $MYSQL_PASSWD
-  echo '[mysql]' > ~/.my.cnf
-  echo 'user = root' >> ~/.my.cnf
-  echo "pass = $MYSQL_PASSWD" >> ~/.my.cnf
+    service mysql start
+    MYSQL_PASSWD=`random_password`
+    echo "setting MySQL password to random password $MYSQL_PASSWD"
+    mysqladmin -u root password $MYSQL_PASSWD
+    echo '[mysql]' > ~/.my.cnf
+    echo 'user = root' >> ~/.my.cnf
+    echo "password = $MYSQL_PASSWD" >> ~/.my.cnf
 }
 
 #
@@ -70,58 +71,51 @@ prepare_mysql() {
 #   1: settings - the LocalSettings path e.g /var/www/html/mediawiki/LocalSettings.php
 #
 checkWikiDB() {
-  # get parameters
-  local l_settings="$1"
-  echo "checking Wiki Database"
+    # get parameters
+    local l_settings="$1"
+    echo "checking Wiki Database"
 
-  # check mysql access
-  local l_pages=`echo "select count(*) as pages from page" | dosql "$l_settings" || true`
-  #
-  # this will return a number of pages or a mysql ERROR
-  #
-  echo "$l_pages" | grep "ERROR 1049" > /dev/null
-  if [ $? -ne 0 ]
-  then
-    # if the db does not exist or access is otherwise denied:
-    # ERROR 1045 (28000): Access denied for user '<user>'@'localhost' (using password: YES)
-	  echo "$l_pages" | grep "ERROR 1045" > /dev/null
-	  if [ $? -ne 0 ]
-	  then
+    # check mysql access
+    l_pages=$(echo "select count(*) as pages from page" | dosql "$l_settings" || true)
+    #
+    # this will return a number of pages or a mysql ERROR
+    #
+    if [[ "$l_pages" != *"ERROR 1049"* ]]; then
+        # if the db does not exist or access is otherwise denied:
+        # ERROR 1045 (28000): Access denied for user '<user>'@'localhost' (using password: YES)
+	if [[ "$l_pages" != *"ERROR 1045"* ]]; then
 	    # if the db was just created:
 	    #ERROR 1146 (42S02) at line 1: Table '<dbname>.page' doesn't exist
-	    echo "$l_pages" | grep "ERROR 1146" > /dev/null
-	    if [ $? -ne 0 ]
-	    then
-	      # if everything was o.k.
-	      echo "$l_pages" | grep "pages" > /dev/null
-	      if [ $? -ne 0 ]
-	      then
-	        # something unexpected
-	        echo "*** $l_pages"
-	      else
-	        # this is what we expect
-	        echo "$l_pages"
-	      fi
+	    if [[ "$l_pages" != *"ERROR 1146"* ]]; then
+	        # if everything was o.k.
+	        if [[ "$l_pages" != *"pages"* ]]; then
+	            # something unexpected
+	            echo "*** $l_pages"
+                    exit 1
+	        else
+	            # this is what we expect
+	            echo "$l_pages"
+	        fi
 	    else
-	      # db just created - fill it
-	      echo "$dbname seems to be just created and empty - shall I initialize it with the backup from an empty mediawiki database? y/n"
-	      read answer
-	      case $answer in
-	        y|Y|yes|Yes) initialize $l_settings;;
-	        *) echo "ok - leaving things alone ...";;
-	      esac
+	        # db just created - fill it
+	        echo "$dbname seems to be just created and empty - shall I initialize it with the backup from an empty mediawiki database? y/n"
+	        read answer
+	        case $answer in
+	            y|Y|yes|Yes) initialize $l_settings;;
+	            *) echo "ok - leaving things alone ...";;
+	        esac
 	    fi
-	  else
+	else
 	    # something unexpected
 	    echo "*** $l_pages"
-	  fi
-	else
-	  getdbenv "$l_settings"
-	  echo  "$l_pages: database $dbname not created yet"
-	  echo "will create database $dbname now ..."
-	  echo "create database $dbname;" | mysql --host="$dbserver" --user="$dbuser" --password="$dbpass" 2>&1
-	  echo "grant all privileges on $dbname.* to $dbuser@'localhost' identified by '"$dbpass"';" | dosql "$l_settings"
 	fi
+    else
+	getdbenv "$l_settings"
+	echo  "$l_pages: database $dbname not created yet"
+	echo "will create database $dbname now ..."
+	echo "create database $dbname;" | mysql --host="$dbserver" --user="$dbuser" --password="$dbpass" 2>&1
+	echo "grant all privileges on $dbname.* to $dbuser@'localhost' identified by '"$dbpass"';" | dosql "$l_settings"
+    fi
 }
 
 
@@ -132,12 +126,12 @@ checkWikiDB() {
 #   1: settings - the LocalSettings path e.g /var/www/html/mediawiki/LocalSettings.php
 #
 prepare_mediawiki() {
-  local l_settings="$1"
-  local l_hostname=`hostname`
-  local l_secretkey=`uuidgen | md5sum | cut -f1 -d" "`
-  local l_updatekey=`uuidgen | md5sum | cut -c 1-12`
-  ln -s $mwpath $apachepath/mediawiki
-	cat << EOF > $l_settings
+    local l_settings="$1"
+    local l_hostname=`hostname`
+    local l_secretkey=`uuidgen | md5sum | cut -f1 -d" "`
+    local l_updatekey=`uuidgen | md5sum | cut -c 1-12`
+    ln -s $mwpath $apachepath/mediawiki
+    cat << EOF > $l_settings
 <?php
 # This file was automatically generated by the MediaWiki 1.25.3
 # installer. If you make manual changes, please keep track in case you
@@ -309,22 +303,22 @@ prepare_mediawiki $localsettings_dist
 # create a random SYSOP passsword
 SYSOP_PASSWD=`random_password`
 
-# make sure the Wiki Database exists
-checkWikiDB $localsettings_dist
-
 # run the Mediawiki install script
 php $mwpath/maintenance/install.php \
-  --dbname $dbname \
-  --dbpass $dbpass \
-  --dbserver localhost \
-  --dbtype mysql \
-  --dbuser root \
-  --email mediawiki@localhost \
-  --installdbpass $dbpass \
-  --installdbuser $dbuser \
-  --pass $SYSOP_PASSWD \
-  --scriptpath /mediawiki \
-  Sysop
+    --dbname "wiki" \
+    --dbpass "$MYSQL_PASSWD" \
+    --dbserver localhost \
+    --dbtype mysql \
+    --dbuser root \
+    --email mediawiki@localhost \
+    --installdbpass $dbpass \
+    --installdbuser $dbuser \
+    --pass $SYSOP_PASSWD \
+    --scriptpath /mediawiki \
+    Sysop
+
+# make sure the Wiki Database exists
+ checkWikiDB $localsettings_dist
 
 # get the database environment variables
 getdbenv $localsettings_dist
