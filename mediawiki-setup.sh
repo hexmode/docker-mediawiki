@@ -5,47 +5,14 @@
 # see LICENSE
 #
 # WF 2015-10-18
-# 
+#
 # Mediawiki docker image entrypoint script
 #
 # see
 # https://www.mediawiki.org/wiki/Manual:Installing_MediaWiki
-# 
-# do not uncomment this - it will spoil the $? handling
-#set -e
+#
+set -e
 
-#ansi colors
-#http://www.csc.uvic.ca/~sae/seng265/fall04/tips/s265s047-tips/bash-using-colors.html
-blue='\e[0;34m'
-red='\e[0;31m'
-green='\e[0;32m' # '\e[1;32m' is too bright for white bg.
-endColor='\e[0m'
-
-#
-# a colored message 
-#   params:
-#     1: l_color - the color of the message
-#     2: l_msg - the message to display
-#
-color_msg() {
-  local l_color="$1"
-	local l_msg="$2"
-	echo -e "${l_color}$l_msg${endColor}"
-}
-
-#
-# error
-#
-#   show an error message and exit
-#
-#   params:
-#     1: l_msg - the message to display
-error() {
-  local l_msg="$1"
-	# use ansi red for error
-  color_msg $red "Error: $l_msg" 1>&2
-  exit 1
-}
 
 #
 # generate a random password
@@ -56,32 +23,32 @@ random_password() {
 
 #
 # get the database environment
-#  params: 
+#  params:
 #     1: l_settings - the Localsettings to get the db info from
 #
 #
 getdbenv() {
   local l_settings="$1"
-	# get database parameters from local settings 
-	dbserver=`egrep '^.wgDBserver' $l_settings | cut -d'"' -f2`
-	dbname=`egrep '^.wgDBname'     $l_settings | cut -d'"' -f2`
-	dbuser=`egrep '^.wgDBuser'     $l_settings | cut -d'"' -f2`
-	dbpass=`egrep '^.wgDBpassword' $l_settings | cut -d'"' -f2`
+  # get database parameters from local settings
+  dbserver=`egrep '^.wgDBserver' $l_settings | cut -d'"' -f2`
+  dbname=`egrep '^.wgDBname'     $l_settings | cut -d'"' -f2`
+  dbuser=`egrep '^.wgDBuser'     $l_settings | cut -d'"' -f2`
+  dbpass=`egrep '^.wgDBpassword' $l_settings | cut -d'"' -f2`
 }
 
 #
-# do an sql command 
-#  params: 
+# do an sql command
+#  params:
 #     1: l_settings - the Localsettings to get the db info from
 #
 dosql() {
-  # get parameters
-	local l_settings="$1"
-	# get database parameters from local settings 
-	getdbenv "$l_settings"
-	# uncomment for debugging mysql statement
-	#echo mysql --host="$dbserver" --user="$dbuser" --password="$dbpass" "$dbname"
-	mysql --host="$dbserver" --user="$dbuser" --password="$dbpass" "$dbname" 2>&1
+    # get parameters
+    local l_settings="$1"
+    # get database parameters from local settings
+    getdbenv "$l_settings"
+    # uncomment for debugging mysql statement
+    #echo mysql --host="$dbserver" --user="$dbuser" --password="$dbpass" "$dbname"
+    mysql --host="$dbserver" "$dbname" 2>&1
 }
 
 #
@@ -90,22 +57,25 @@ dosql() {
 prepare_mysql() {
   service mysql start
   MYSQL_PASSWD=`random_password`
-	color_msg $blue "setting MySQL password to random password $MYSQL_PASSWD"
+  echo "setting MySQL password to random password $MYSQL_PASSWD"
   mysqladmin -u root password $MYSQL_PASSWD
+  echo '[mysql]' > ~/.my.cnf
+  echo 'user = root' >> ~/.my.cnf
+  echo "pass = $MYSQL_PASSWD" >> ~/.my.cnf
 }
 
 #
 # check the Wiki Database defined in the  LocalSettings.php for the given site
-#  params: 
+#  params:
 #   1: settings - the LocalSettings path e.g /var/www/html/mediawiki/LocalSettings.php
 #
 checkWikiDB() {
   # get parameters
   local l_settings="$1"
-  color_msg $blue "checking Wiki Database"
-    
+  echo "checking Wiki Database"
+
   # check mysql access
-  local l_pages=`echo "select count(*) as pages from page" | dosql "$l_settings" `
+  local l_pages=`echo "select count(*) as pages from page" | dosql "$l_settings" || true`
   #
   # this will return a number of pages or a mysql ERROR
   #
@@ -125,30 +95,30 @@ checkWikiDB() {
 	      # if everything was o.k.
 	      echo "$l_pages" | grep "pages" > /dev/null
 	      if [ $? -ne 0 ]
-	      then 
+	      then
 	        # something unexpected
-	        error "$l_pages"
+	        echo "*** $l_pages"
 	      else
 	        # this is what we expect
-	        color_msg $green "$l_pages"
+	        echo "$l_pages"
 	      fi
 	    else
 	      # db just created - fill it
-	      color_msg $blue "$dbname seems to be just created and empty - shall I initialize it with the backup from an empty mediawiki database? y/n"
+	      echo "$dbname seems to be just created and empty - shall I initialize it with the backup from an empty mediawiki database? y/n"
 	      read answer
 	      case $answer in
 	        y|Y|yes|Yes) initialize $l_settings;;
-	        *) color_msg $green "ok - leaving things alone ...";;
+	        *) echo "ok - leaving things alone ...";;
 	      esac
 	    fi
 	  else
 	    # something unexpected
-	    error "$l_pages"
+	    echo "*** $l_pages"
 	  fi
 	else
 	  getdbenv "$l_settings"
-	  color_msg $red  "$l_pages: database $dbname not created yet"
-	  color_msg $blue "will create database $dbname now ..."
+	  echo  "$l_pages: database $dbname not created yet"
+	  echo "will create database $dbname now ..."
 	  echo "create database $dbname;" | mysql --host="$dbserver" --user="$dbuser" --password="$dbpass" 2>&1
 	  echo "grant all privileges on $dbname.* to $dbuser@'localhost' identified by '"$dbpass"';" | dosql "$l_settings"
 	fi
@@ -158,16 +128,18 @@ checkWikiDB() {
 #
 # prepare mediawiki
 #
-#  params: 
+#  params:
 #   1: settings - the LocalSettings path e.g /var/www/html/mediawiki/LocalSettings.php
-# 
+#
 prepare_mediawiki() {
   local l_settings="$1"
   local l_hostname=`hostname`
+  local l_secretkey=`uuidgen | md5sum | cut -f1 -d" "`
+  local l_updatekey=`uuidgen | md5sum | cut -c 1-12`
   ln -s $mwpath $apachepath/mediawiki
 	cat << EOF > $l_settings
 <?php
-# This file was automatically generated by the MediaWiki 1.23.11
+# This file was automatically generated by the MediaWiki 1.25.3
 # installer. If you make manual changes, please keep track in case you
 # need to recreate them later.
 #
@@ -186,8 +158,8 @@ if ( !defined( 'MEDIAWIKI' ) ) {
 ## Uncomment this to disable output compression
 # \$wgDisableOutputCompression = true;
 
-\$wgSitename = "wiki";
-\$wgMetaNamespace = "Wiki";
+\$wgSitename = "mediawiki@localhost";
+\$wgMetaNamespace = "Mediawiki@localhost";
 
 ## The URL base path to the directory containing the wiki;
 ## defaults for all runtime URL paths are based off of this.
@@ -202,18 +174,19 @@ if ( !defined( 'MEDIAWIKI' ) ) {
 
 ## The relative URL path to the skins directory
 \$wgStylePath = "\$wgScriptPath/skins";
+\$wgResourceBasePath = \$wgScriptPath;
 
 ## The relative URL path to the logo.  Make sure you change this from the default,
 ## or else you'll overwrite your logo when you upgrade!
-\$wgLogo = "\$wgStylePath/common/images/wiki.png";
+\$wgLogo = "\$wgResourceBasePath/resources/assets/wiki.png";
 
 ## UPO means: this is also a user preference option
 
-\$wgEnableEmail = false;
+\$wgEnableEmail = true
 \$wgEnableUserEmail = true; # UPO
 
-\$wgEmergencyContact = "apache@localhost";
-\$wgPasswordSender = "apache@localhost";
+\$wgEmergencyContact = "apache@$l_hostname";
+\$wgPasswordSender = "apache@$l_hostname";
 
 \$wgEnotifUserTalk = false; # UPO
 \$wgEnotifWatchlist = false; # UPO
@@ -230,7 +203,7 @@ if ( !defined( 'MEDIAWIKI' ) ) {
 \$wgDBprefix = "";
 
 # MySQL table options to use during installation or update
-\$wgDBTableOptions = "ENGINE=InnoDB, DEFAULT CHARSET=utf8";
+\$wgDBTableOptions = "ENGINE=InnoDB, DEFAULT CHARSET=binary";
 
 # Experimental charset support for MySQL 5.0.
 \$wgDBmysql5 = false;
@@ -267,15 +240,11 @@ if ( !defined( 'MEDIAWIKI' ) ) {
 # Site language code, should be one of the list in ./languages/Names.php
 \$wgLanguageCode = "en";
 
-\$wgSecretKey = "16da25466b94b683dab67d4533e11e40e0f7b24a15aaab2b3ef5600143ce0007";
+\$wgSecretKey = "$l_secretkey";
 
 # Site upgrade key. Must be set to a string (default provided) to turn on the
 # web installer while LocalSettings.php is in place
-\$wgUpgradeKey = "80554160e8352086";
-
-## Default skin: you can change the default skin. Use the internal symbolic
-## names, ie 'cologneblue', 'monobook', 'vector':
-\$wgDefaultSkin = "vector";
+\$wgUpgradeKey = "$l_upgradekey";
 
 ## For attaching licensing metadata to pages, and displaying an
 ## appropriate copyright notice / icon. GNU Free Documentation
@@ -288,18 +257,27 @@ if ( !defined( 'MEDIAWIKI' ) ) {
 # Path to the GNU diff3 utility. Used for conflict resolution.
 \$wgDiff3 = "/usr/bin/diff3";
 
+## Default skin: you can change the default skin. Use the internal symbolic
+## names, ie 'vector', 'monobook':
+\$wgDefaultSkin = "vector";
+
+# Enabled skins.
+# The following skins were automatically enabled:
+wfLoadSkin( 'CologneBlue' );
+wfLoadSkin( 'Modern' );
+wfLoadSkin( 'MonoBook' );
+wfLoadSkin( 'Vector' );
+
 # The following permissions were set based on your choice in the installer
 \$wgGroupPermissions['*']['createaccount'] = false;
 \$wgGroupPermissions['*']['edit'] = false;
 \$wgGroupPermissions['*']['read'] = false;
 
-# Enabled Extensions. Most extensions are enabled by including the base extension file here
-# but check specific extension documentation for more details
-# The following extensions were automatically enabled:
-require_once "\$IP/extensions/ParserFunctions/ParserFunctions.php";
-require_once "\$IP/extensions/PdfHandler/PdfHandler.php";
-require_once "\$IP/extensions/SyntaxHighlight_GeSHi/SyntaxHighlight_GeSHi.php";
-require_once "\$IP/extensions/WikiEditor/WikiEditor.php";
+# Enabled Extensions.
+wfEnableExtension( 'ParserFunctions' );
+wfEnableExtension( 'SytaxHighlight_GeSHi' );
+wfEnableExtension( 'WikiEditor' );
+wfEnableExtension( 'PdfHandler' );
 
 # End of automatically generated settings.
 # Add more configuration options below.
@@ -308,8 +286,8 @@ EOF
 
 #
 # Start of Docker Entrypoint
-# 
-color_msg $blue "Preparing Mediawiki $MEDIAWIKI_VERSION docker image"
+#
+echo "Preparing Mediawiki $MEDIAWIKI_VERSION docker image"
 
 # set the Path to the Apache Document root
 apachepath=/var/www/html
@@ -319,30 +297,28 @@ mwpath=$apachepath/$MEDIAWIKI
 
 # MediaWiki LocalSettings.php path
 localsettings_dist=$mwpath/LocalSettings.php.dist
+localsettings_inst=$mwpath/LocalSettings.php.inst
 localsettings=$mwpath/LocalSettings.php
-  
+
 # prepare mysql
 prepare_mysql
 
 # prepare the mediawiki
 prepare_mediawiki $localsettings_dist
 
+# create a random SYSOP passsword
+SYSOP_PASSWD=`random_password`
+
 # make sure the Wiki Database exists
 checkWikiDB $localsettings_dist
 
-# get the database environment variables
-getdbenv $localsettings_dist
-
-# create a random SYSOP passsword
-SYSOP_PASSWD=`random_password`
- 
 # run the Mediawiki install script
 php $mwpath/maintenance/install.php \
   --dbname $dbname \
   --dbpass $dbpass \
-  --dbserver $dbserver \
+  --dbserver localhost \
   --dbtype mysql \
-  --dbuser $dbuser \
+  --dbuser root \
   --email mediawiki@localhost \
   --installdbpass $dbpass \
   --installdbuser $dbuser \
@@ -350,20 +326,20 @@ php $mwpath/maintenance/install.php \
   --scriptpath /mediawiki \
   Sysop
 
-color_msg $blue "Mediawiki has been installed with a single user" 
-echo "select user_name from user" | dosql $localsettings_dist
+# get the database environment variables
+getdbenv $localsettings_dist
 
-# start the services
-service apache2 start
+echo "Mediawiki has been installed with a single user"
+echo "select user_name from user" | dosql $localsettings_dist
 
 # enable the LocalSettings
 # move the LocalSettings.php created by the installer above to the side
-mv $mwpath/LocalSettings.php $mwpath/LocalSettings.php.install
+mv $localsettings $localsettings_inst
 # use the one created by this script instead
-mv $mwpath/LocalSettings.php.dist $mwpath/LocalSettings.php
+mv $localsettings_dist $localsettings
 
-color_msg $blue "you can now login to MediaWiki with"
-color_msg $blue "User:Sysop"
-color_msg $blue "Password:$SYSOP_PASSWD"
-# Execute docker run parameter 
-exec "$@"
+echo "you can now login to MediaWiki with"
+echo "User:Sysop"
+echo "Password:$SYSOP_PASSWD"
+# Execute docker run parameter
+
