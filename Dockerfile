@@ -59,6 +59,7 @@ RUN cd /var/www/html/ && \
 RUN a2enmod php5
 
 COPY ./mediawiki-setup.sh /
+COPY ./server-start.sh /
 
 RUN bash /mediawiki-setup.sh
 
@@ -73,4 +74,4 @@ EXPOSE 443
 # mysql
 EXPOSE 3306
 
-cmd ["/usr/sbin/apache2", "-D",  "FOREGROUND"]
+cmd ["/bin/sh", "/server-start.sh"]

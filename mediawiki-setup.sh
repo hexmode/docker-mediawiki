@@ -176,7 +176,7 @@ if ( !defined( 'MEDIAWIKI' ) ) {
 
 ## UPO means: this is also a user preference option
 
-\$wgEnableEmail = true
+\$wgEnableEmail = true;
 \$wgEnableUserEmail = true; # UPO
 
 \$wgEmergencyContact = "apache@$l_hostname";
@@ -268,10 +268,12 @@ wfLoadSkin( 'Vector' );
 \$wgGroupPermissions['*']['read'] = false;
 
 # Enabled Extensions.
-wfEnableExtension( 'ParserFunctions' );
-wfEnableExtension( 'SytaxHighlight_GeSHi' );
-wfEnableExtension( 'WikiEditor' );
-wfEnableExtension( 'PdfHandler' );
+wfLoadExtension( 'ParserFunctions' );
+#wfLoadExtension( 'SytaxHighlight_GeSHi' );
+#wfLoadExtension( 'WikiEditor' );
+#wfLoadExtension( 'PdfHandler' );
+
+ini_set('display_errors', 'on');
 
 # End of automatically generated settings.
 # Add more configuration options below.
